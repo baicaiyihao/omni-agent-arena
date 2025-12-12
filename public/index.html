@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omni-Agent Arena v15 (Wallet Fix)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <style>
+        /* === 基础变量 === */
+        :root { 
+            --primary: #00ff41; 
+            --bg: #050505; 
+            --panel: rgba(16, 20, 24, 0.95); 
+            --danger: #ff2a6d; 
+            --accent: #00ffff; 
+            --gold: #ffd700; 
+        }
+        
+        body { 
+            background-color: var(--bg); 
+            color: var(--primary); 
+            font-family: 'Courier New', monospace; 
+            margin: 0; 
+            overflow: hidden; 
+            user-select: none; 
+        }
+        
+        button { cursor: pointer; transition: 0.2s; font-family: inherit; font-weight: bold; text-transform: uppercase; outline: none; }
+        button:active { transform: scale(0.95); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* === Header === */
+        header { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 80px;
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 40px; background: rgba(0,0,0,0.9); border-bottom: 1px solid #333; 
+            z-index: 2000; box-sizing: border-box; backdrop-filter: blur(10px);
+        }
+        .logo { font-size: 28px; text-shadow: 0 0 10px var(--primary); letter-spacing: 3px; font-weight: 900; }
+        .header-right { display: flex; align-items: center; gap: 20px; }
+        .net-badge { font-size: 12px; color: #aaa; border: 1px solid #333; padding: 6px 12px; border-radius: 4px; background: #111; }
+        
+        /* 钱包按钮 (悬停变红) */
+        .wallet-btn { 
+            border: 1px solid var(--primary); color: var(--primary); 
+            padding: 8px 24px; background: rgba(0,255,65,0.1); 
+            font-size: 14px; border-radius: 4px; min-width: 160px;
+            transition: 0.3s;
+        }
+        .wallet-btn.connected { 
+            background: #111; color: #fff; border-color: #444; 
+        }
+        .wallet-btn.connected:hover {
+            background: rgba(255, 42, 109, 0.2);
+            border-color: var(--danger);
+            color: var(--danger);
+            content: "DISCONNECT";
+        }
+        /* 利用伪元素实现文字切换提示 */
+        .wallet-btn.connected:hover span { display: none; }
+        .wallet-btn.connected:hover::after { content: "断开连接 (DISCONNECT)"; }
+
+        /* === 容器 === */
+        .container { 
+            width: 100vw; height: 100vh; 
+            position: relative; 
+            padding-top: 80px; 
+            box-sizing: border-box;
+        }
+
+        /* ================= 1. 大厅 (Lobby) ================= */
+        #view-lobby { 
+            width: 100%; height: 100%; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+            z-index: 10; position: relative;
+        }
+        
+        .lobby-content { text-align: center; width: 100%; max-width: 900px; animation: fadeIn 0.5s; }
+        .hero-title { font-size: 60px; margin: 0 0 10px 0; text-shadow: 0 0 20px var(--primary); letter-spacing: 5px; }
+        .sub-title { color: #666; margin-bottom: 60px; font-size: 16px; }
+        
+        .action-row { display: flex; justify-content: center; gap: 60px; margin-bottom: 60px; }
+        .big-btn { 
+            width: 260px; height: 100px; font-size: 22px; 
+            border: 2px solid var(--primary); background: rgba(0, 51, 0, 0.4); color: var(--primary); 
+            display: flex; align-items: center; justify-content: center; gap: 15px;
+            box-shadow: 0 0 30px rgba(0,255,65,0.1); border-radius: 8px;
+        }
+        .big-btn:hover { background: var(--primary); color: #000; box-shadow: 0 0 50px var(--primary); transform: translateY(-5px); }
+        
+        .room-panel { 
+            width: 800px; margin: 0 auto; 
+            border: 1px solid #333; background: rgba(10,10,10,0.8); 
+            border-radius: 8px; overflow: hidden; 
+        }
+        .room-header { background: #151515; padding: 15px 30px; display: flex; justify-content: space-between; color: #666; font-size: 12px; border-bottom: 1px solid #333; }
+        .room-list { max-height: 300px; overflow-y: auto; text-align: left; }
+        .room-item { padding: 15px 30px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+        .room-item:hover { background: #1a1a1a; }
+        .join-btn { border: 1px solid var(--primary); color: var(--primary); background: transparent; padding: 5px 15px; font-size: 12px; border-radius: 4px; }
+        .join-btn:hover { background: var(--primary); color: #000; }
+        .spectate-btn { border: 1px solid var(--accent); color: var(--accent); background: transparent; padding: 5px 15px; font-size: 12px; border-radius: 4px; }
+        .spectate-btn:hover { background: var(--accent); color: #000; }
+
+        /* ================= 2. 准备室 (Waiting) ================= */
+        #view-room { width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; background: #0b0b0f; z-index: 20; position: relative; }
+        .waiting-box { background: var(--panel); border: 2px solid #333; padding: 60px; text-align: center; width: 800px; border-radius: 12px; box-shadow: 0 0 60px rgba(0,0,0,0.8); animation: zoomIn 0.3s; }
+        .vs-stage { display: flex; justify-content: space-around; align-items: center; margin: 50px 0; }
+        .p-card { width: 180px; height: 220px; border: 2px dashed #444; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 10px; }
+        .p-card.active { border-style: solid; border-color: var(--primary); background: rgba(0,255,65,0.05); box-shadow: 0 0 30px rgba(0,255,65,0.1); }
+        .ready-badge { background: var(--primary); color: #000; padding: 5px 12px; font-size: 12px; margin-top: 15px; border-radius: 4px; font-weight: bold; opacity: 0; }
+        .ready-badge.show { opacity: 1; animation: popIn 0.3s; }
+
+        /* ================= 3. 战斗场景 (Battle) ================= */
+        #view-battle { width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0; background: radial-gradient(circle at center, #1b2735 0%, #000 100%); z-index: 50; }
+        
+        /* HUD */
+        .hud-container { 
+            position: absolute; top: 120px; left: 50%; transform: translateX(-50%); 
+            width: 80%; max-width: 1000px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            z-index: 60; 
+        }
+        .hud-player { width: 45%; position: relative; }
+        .p-name { font-size: 24px; font-weight: bold; color: #fff; text-shadow: 0 0 10px var(--primary); margin-bottom: 8px; display: block; }
+        .hp-bar-frame { width: 100%; height: 30px; background: #222; border: 2px solid #555; transform: skewX(-20deg); position: relative; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .hp-fill { height: 100%; background: linear-gradient(90deg, #00ff00, #adff2f); width: 100%; transition: width 0.4s ease-out; }
+        .hp-text { position: absolute; top: 4px; right: 15px; font-size: 16px; color: #fff; font-weight: bold; transform: skewX(20deg); text-shadow: 1px 1px 2px #000; z-index: 2; }
+        .hud-player.p2 { text-align: right; }
+        .hud-player.p2 .hp-fill { float: right; background: linear-gradient(-90deg, #ff4444, #ff9900); }
+        .hud-player.p2 .hp-text { left: 15px; right: auto; }
+
+        /* 退出按钮 (右下角) */
+        .exit-battle-btn { 
+            position: absolute; bottom: 30px; right: 30px; 
+            border: 1px solid #444; background: rgba(0,0,0,0.8); color: #888; 
+            padding: 10px 30px; font-size: 14px; z-index: 100; border-radius: 8px; 
+            backdrop-filter: blur(5px); transition: 0.3s;
+        }
+        .exit-battle-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(255,0,0,0.2); }
+
+        /* 角色区域 */
+        .stage-area { position: absolute; bottom: 220px; width: 100%; height: 300px; display: flex; justify-content: center; align-items: flex-end; gap: 350px; }
+        .char-box { width: 250px; height: 250px; position: relative; display: flex; justify-content: center; align-items: flex-end; }
+        .sprite { font-size: 160px; filter: drop-shadow(0 20px 30px rgba(0,0,0,0.7)); position: relative; z-index: 10; transition: transform 0.1s; }
+        #p2-sprite { transform: scaleX(-1); }
+
+        /* 特效 & 动画 */
+        .dmg-popup { position: absolute; top: -50px; left: 50%; transform: translateX(-50%); font-size: 80px; font-weight: 900; color: #fff; -webkit-text-stroke: 3px var(--danger); text-shadow: 0 0 20px var(--danger); opacity: 0; pointer-events: none; z-index: 30; }
+        .dmg-popup.crit { color: var(--gold); -webkit-text-stroke: 3px #b8860b; font-size: 100px; text-shadow: 0 0 40px var(--gold); }
+        .anim-float { animation: floatUp 1.2s forwards; }
+        .bubble { position: absolute; top: -90px; background: #fff; color: #000; padding: 8px 18px; border-radius: 20px; font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.2s; white-space: nowrap; z-index: 20; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .bubble:after { content:''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #fff transparent transparent transparent; }
+        #p2-char .bubble { transform: scaleX(-1); }
+
+        /* 日志 */
+        .log-box { 
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); 
+            width: 800px; height: 180px; 
+            background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 8px;
+            overflow-y: auto; padding: 20px; font-size: 14px; color: #aaa; pointer-events: auto; 
+            backdrop-filter: blur(5px); box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        .log-row { margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; }
+        .tx-link { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); margin-left: 10px; }
+        .hl-tx { color: var(--gold); }
+        .hl-dmg { color: var(--danger); font-weight: bold; }
+        .hl-crit { color: var(--gold); font-weight: 900; }
+
+        /* 结算弹窗 */
+        .result-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        .result-title { font-size: 120px; font-weight: 900; color: var(--gold); margin-bottom: 10px; text-shadow: 0 0 50px var(--gold); animation: zoomIn 0.5s; }
+        .result-sub { font-size: 30px; color: #aaa; margin-bottom: 60px; letter-spacing: 5px; }
+
+        /* Modal */
+        .modal-mask { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; justify-content:center; align-items:center; z-index:3000; backdrop-filter: blur(5px); }
+        .modal-box { background:var(--panel); border:2px solid var(--primary); padding:40px; width:500px; text-align:center; box-shadow: 0 0 60px rgba(0,255,65,0.15); border-radius: 15px; }
+        .hero-opt { border:1px solid #333; padding:15px; margin:5px; display:inline-block; cursor:pointer; width:100px; border-radius: 8px; transition: 0.2s; background: #000; }
+        .hero-opt:hover { border-color: #666; transform: translateY(-5px); }
+        .hero-opt.selected { background: #003300; border-color:var(--primary); box-shadow: 0 0 20px rgba(0,255,65,0.3); }
+
+        /* 动画关键帧 */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes zoomIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes floatUp { 0% { opacity: 1; transform: translate(-50%, 0) scale(0.5); } 100% { opacity: 0; transform: translate(-50%, -100px) scale(1); } }
+        @keyframes atk-right { 0% { transform: translateX(0); } 50% { transform: translateX(150px); } 100% { transform: translateX(0); } }
+        @keyframes atk-left { 0% { transform: scaleX(-1) translateX(0); } 50% { transform: scaleX(-1) translateX(150px); } 100% { transform: scaleX(-1) translateX(0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+
+        .anim-atk-p1 { animation: atk-right 0.2s cubic-bezier(0.1, 0.7, 1.0, 0.1); }
+        .anim-atk-p2 { animation: atk-left 0.2s cubic-bezier(0.1, 0.7, 1.0, 0.1); }
+        .effect-shake { animation: shake 0.4s; filter: brightness(2) sepia(1) hue-rotate(-50deg) saturate(5); }
+        .show-bubble { opacity: 1; transform: translateY(-10px); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">OMNI-ARENA</div>
+    <div class="header-right">
+        <span class="net-badge">🟢 ZetaChain Testnet</span>
+        <button id="wallet-btn" class="wallet-btn" onclick="handleWalletClick()">CONNECT WALLET</button>
+    </div>
+</header>
+
+<div class="container">
+
+    <div id="view-lobby">
+        <div class="lobby-content">
+            <h1 class="hero-title">BATTLE AGENT</h1>
+            <p class="sub-title">Fully On-Chain AI Battle Arena</p>
+            
+            <div class="action-row">
+                <button class="big-btn" onclick="openHeroSelect('create')">
+                    <span style="font-size:30px">🏠</span> 
+                    <span>创建 PVP</span>
+                </button>
+                <button class="big-btn" onclick="openHeroSelect('pve')">
+                    <span style="font-size:30px">🤖</span> 
+                    <span>人机练习</span>
+                </button>
+            </div>
+            
+            <div class="room-panel">
+                <div class="room-header">
+                    <span>ROOM NAME / ID</span>
+                    <span>PLAYERS</span>
+                </div>
+                <div id="room-list" class="room-list">
+                    <div style="padding:40px; color:#444;">Connecting to Lobby...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-room">
+        <div class="waiting-box">
+            <h2 style="margin-bottom:40px;">BATTLE PREPARATION <span id="room-id-display" style="color:var(--primary); font-size:16px;"></span></h2>
+            <div class="vs-stage">
+                <div class="p-card active" id="wait-p1">
+                    <div style="font-size:60px" id="icon-p1">🦁</div>
+                    <div id="name-p1" style="font-weight:bold; margin-top:10px;">Player 1</div>
+                    <div class="ready-badge show">READY</div>
+                </div>
+                <div style="font-size:50px; font-weight:900; color:#333; font-style:italic;">VS</div>
+                <div class="p-card" id="wait-p2">
+                    <div style="font-size:60px" id="icon-p2">👤</div>
+                    <div id="name-p2" style="font-weight:bold; margin-top:10px;">Waiting...</div>
+                    <div class="ready-badge" id="tag-p2">READY</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:20px; justify-content:center; margin-top:50px;">
+                <button onclick="leaveGame()" style="background:transparent; color:#888; border:1px solid #444; padding:12px 30px; border-radius:30px;">LEAVE ROOM</button>
+                <button id="btn-ready" onclick="doReady()" disabled style="background:var(--primary); border:none; color:#000; padding:12px 50px; border-radius:30px; font-weight:900; box-shadow: 0 0 20px var(--primary);">WAITING...</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-battle">
+        <div class="battle-scene">
+            <button class="exit-battle-btn" onclick="leaveGame()">❌ 撤退 / EXIT</button>
+            
+            <div class="hud-container">
+                <div class="hud-player p1">
+                    <span class="p-name" id="b-p1-name">Player 1</span>
+                    <div class="hp-bar-frame"><div class="hp-fill" id="hp-p1"></div></div>
+                    <div class="hp-text" id="txt-hp-p1">120/120</div>
+                </div>
+                <div class="hud-player p2">
+                    <span class="p-name" id="b-p2-name">Player 2</span>
+                    <div class="hp-bar-frame"><div class="hp-fill" id="hp-p2"></div></div>
+                    <div class="hp-text" id="txt-hp-p2">120/120</div>
+                </div>
+            </div>
+
+            <div class="stage-area">
+                <div class="char-box" id="p1-box">
+                    <div class="bubble" id="msg-p1">Thinking...</div>
+                    <div class="dmg-popup" id="dmg-p1"></div>
+                    <div class="sprite" id="spr-p1">🦁</div>
+                </div>
+                <div class="char-box" id="p2-box">
+                    <div class="bubble" id="msg-p2">...</div>
+                    <div class="dmg-popup" id="dmg-p2"></div>
+                    <div class="sprite" id="spr-p2">🤖</div>
+                </div>
+            </div>
+
+            <div class="log-box" id="battle-logs">
+                <div style="color:#666; text-align:center;">Initializing Battle System...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-layer" class="result-layer">
+        <div class="result-title" id="res-txt">VICTORY</div>
+        <div class="result-sub" id="res-sub">Winner: Player 1</div>
+        <button class="big-btn" onclick="leaveGame()">返回大厅 (Lobby)</button>
+    </div>
+
+</div>
+
+<div id="hero-modal" class="modal-mask">
+    <div class="modal-box">
+        <h3 style="margin-bottom:30px; font-size:24px;">配置你的 Agent</h3>
+        
+        <div style="text-align:left; color:#888; font-size:12px;">选择英雄 (Hero):</div>
+        <div style="margin:20px 0 40px 0; display:flex; justify-content:center; gap:10px;">
+            <div class="hero-opt" onclick="selHero('WARRIOR',this)">
+                <div style="font-size:40px">🦁</div>
+                <div style="font-size:12px; margin-top:10px; color:#aaa">狂战士</div>
+            </div>
+            <div class="hero-opt" onclick="selHero('MAGE',this)">
+                <div style="font-size:40px">🧙‍♂️</div>
+                <div style="font-size:12px; margin-top:10px; color:#aaa">大法师</div>
+            </div>
+            <div class="hero-opt" onclick="selHero('PALADIN',this)">
+                <div style="font-size:40px">🛡️</div>
+                <div style="font-size:12px; margin-top:10px; color:#aaa">圣骑士</div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:15px;">
+            <button onclick="document.getElementById('hero-modal').style.display='none'" style="flex:1; padding:15px; background:transparent; border:1px solid #444; color:#888; border-radius:5px;">取消</button>
+            <button onclick="confirmHero()" style="flex:2; padding:15px; background:var(--primary); border:none; color:#000; font-weight:bold; border-radius:5px;">确认出战</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = "/api";
+    let state = { addr: null, room: null, hero: null, action: null, targetId: null };
+    const ICONS = { 'WARRIOR': '🦁', 'MAGE': '🧙‍♂️', 'PALADIN': '🛡️', 'AI': '🤖' };
+    
+    let pollInt = null;
+    let lastLogLen = 0;
+    let isGameEnded = false;
+
+    // --- Init ---
+    window.onload = async () => {
+        const saved = localStorage.getItem('omni_addr');
+        if(saved) {
+            state.addr = saved;
+            updateWalletUI(true);
+            startLobbyPoll();
+        } else {
+            updateWalletUI(false);
+        }
+        switchView('view-lobby');
+    };
+
+    function updateWalletUI(isConnected) {
+        const btn = document.getElementById('wallet-btn');
+        if(isConnected) {
+            btn.innerHTML = `<span>${state.addr.slice(0,6)}...</span>`;
+            btn.classList.add('connected');
+        } else {
+            btn.innerHTML = "CONNECT WALLET";
+            btn.classList.remove('connected');
+        }
+    }
+
+    // 🔥 核心修复：处理钱包点击逻辑 (断开/连接)
+    async function handleWalletClick() {
+        if(state.addr) {
+            // 已连接 -> 断开
+            if(confirm("确定要断开钱包连接吗? (Disconnect Wallet?)")) {
+                localStorage.removeItem('omni_addr');
+                state.addr = null;
+                updateWalletUI(false);
+                // 强制刷新页面以清除所有状态
+                location.reload(); 
+            }
+        } else {
+            // 未连接 -> 连接
+            connectWallet();
+        }
+    }
+
+    async function connectWallet() {
+        const p = window.okxwallet || window.ethereum;
+        if(!p) return alert("请安装 Metamask 或 OKX 钱包");
+        try {
+            // 🔥 强制弹出钱包选择框 (EIP-2255)
+            try {
+                await p.request({
+                    method: "wallet_requestPermissions",
+                    params: [{ eth_accounts: {} }]
+                });
+            } catch (permErr) {
+                console.log("Permission request rejected, fallback to standard connect");
+            }
+
+            // 标准连接流程
+            await p.request({method:'eth_requestAccounts'});
+            const provider = new ethers.providers.Web3Provider(p);
+            const signer = provider.getSigner();
+            state.addr = await signer.getAddress();
+            
+            // 登录 (签名)
+            const msg = `Login Omni-Arena\nUser:${state.addr}\nTs:${Date.now()}`;
+            const sig = await signer.signMessage(msg);
+            
+            await fetch(`${API}/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:state.addr}) });
+            
+            localStorage.setItem('omni_addr', state.addr);
+            updateWalletUI(true);
+            startLobbyPoll();
+        } catch(e) { alert("连接失败: "+e.message); }
+    }
+
+    // --- Lobby & Modal ---
+    function openHeroSelect(act, rId=null) {
+        if(!state.addr) return alert("请先连接钱包!");
+        state.action = act;
+        state.targetId = rId;
+        state.hero = null;
+        document.querySelectorAll('.hero-opt').forEach(e=>e.classList.remove('selected'));
+        document.getElementById('hero-modal').style.display='flex';
+    }
+    function selHero(h, el) {
+        state.hero = h;
+        document.querySelectorAll('.hero-opt').forEach(e=>e.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+    async function confirmHero() {
+        if(!state.hero) return alert("请选择英雄");
+        document.getElementById('hero-modal').style.display='none';
+
+        // 默认 Chain = Base
+        const body = { address: state.addr, chain: 'Base', heroId: state.hero, action: state.action, roomId: state.targetId };
+        if(state.action==='create') body.action='create';
+
+        let url = state.action==='create'?'/join-room':(state.action==='pve'?'/pve':'/join-room');
+        
+        try {
+            const res = await fetch(`${API}${url}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+            const d = await res.json();
+            
+            if(d.status==='success') {
+                enterRoom(d.roomId, d.role || 'player');
+                if(state.action !== 'spectate') {
+                    fetch(`${API}/ready`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:state.addr, heroId:state.hero})});
+                }
+            } else {
+                alert(d.error || "操作失败");
+            }
+        } catch(e) { alert("网络请求失败"); }
+    }
+
+    // --- Spectate ---
+    async function spectate(roomId) {
+        const res = await fetch(`${API}/join-room`, { 
+            method:'POST', headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({ address: state.addr, action: 'spectate', roomId }) 
+        });
+        const d = await res.json();
+        if(d.status==='success') enterRoom(roomId, 'spectator');
+    }
+
+    // --- Room Logic ---
+    function enterRoom(rid, role) {
+        state.room = rid;
+        
+        if(state.action === 'pve' || role === 'spectator') {
+            startBattleMode();
+        } else {
+            switchView('view-room');
+            document.getElementById('room-id-display').innerText = "#"+rid;
+            startPolling();
+        }
+    }
+
+    function startBattleMode() {
+        switchView('view-battle');
+        
+        // 🔥 修复1：重置血条长度
+        document.getElementById('hp-p1').style.width = '100%';
+        document.getElementById('hp-p2').style.width = '100%';
+        
+        // 🔥 修复2：重置血条颜色 (强制变回绿色)
+        document.getElementById('hp-p1').style.background = 'linear-gradient(90deg, #00ff00, #adff2f)';
+        document.getElementById('hp-p2').style.background = 'linear-gradient(-90deg, #00ff00, #adff2f)'; // P2 是反向的
+        
+        // 🔥 修复3：重置血量文字
+        document.getElementById('txt-hp-p1').innerText = '120/120';
+        document.getElementById('txt-hp-p2').innerText = '120/120';
+
+        // 清空日志和状态
+        document.getElementById('battle-logs').innerHTML = ''; 
+        lastLogLen = 0;
+        animQueue = [];
+        isGameEnded = false;
+        battleInitialized = false; 
+        
+        startPolling();
+    }
+
+    async function leaveGame() {
+        if(state.room) {
+            await fetch(`${API}/leave-room`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:state.addr})});
+        }
+        state.room = null;
+        if(pollInt) clearInterval(pollInt);
+        document.getElementById('result-layer').style.display='none';
+        switchView('view-lobby');
+        startLobbyPoll();
+    }
+
+    function switchView(id) {
+        ['view-lobby','view-room','view-battle'].forEach(v => {
+            document.getElementById(v).style.display = (v===id ? 'flex' : 'none');
+        });
+        // 战斗场景需要 absolute 定位，保持 block
+        if(id === 'view-battle') document.getElementById('view-battle').style.display = 'block';
+    }
+
+    // --- Core Polling ---
+    function startPolling() {
+        if(pollInt) clearInterval(pollInt);
+        
+        pollInt = setInterval(async ()=>{
+            if(!state.room) return;
+            try {
+                const res = await fetch(`${API}/room-status/${state.room}`);
+                const d = await res.json();
+
+                if(d.status === 'waiting') {
+                    renderWaiting(d.room);
+                } else if(d.status === 'fighting' || d.status === 'finished') {
+                    if(document.getElementById('view-battle').style.display === 'none') {
+                        startBattleMode();
+                        document.getElementById('b-p1-name').innerText = d.room.p1.address.slice(0,4);
+                        document.getElementById('b-p2-name').innerText = d.room.p2.address.slice(0,4);
+                        document.getElementById('spr-p1').innerText = ICONS[d.room.p1.hero]||'🦁';
+                        document.getElementById('spr-p2').innerText = ICONS[d.room.p2.hero]||'🤖';
+                    }
+                    processLogs(d.logs);
+                    
+                    if(d.status === 'finished' && !isGameEnded) {
+                        isGameEnded = true; 
+                        setTimeout(()=>{
+                            const winner = d.room.winner === 'p1' ? "PLAYER 1" : "PLAYER 2";
+                            document.getElementById('res-txt').innerText = winner + " WINS";
+                            document.getElementById('res-sub').innerText = `Battle Finished`;
+                            document.getElementById('result-layer').style.display = 'flex';
+                            clearInterval(pollInt);
+                        }, 2000);
+                    }
+                } else if(d.status === 'closed') {
+                    alert("房间已解散");
+                    leaveGame();
+                }
+            } catch(e) { console.error(e); }
+        }, 1000);
+    }
+
+    function renderWaiting(r) {
+        const setSlot = (id, p) => {
+            const el = document.getElementById('wait-'+id);
+            if(p) {
+                el.classList.add('active');
+                document.getElementById('icon-'+id).innerText = ICONS[p.hero]||'👤';
+                document.getElementById('name-'+id).innerText = p.address.slice(0,6);
+                if(p.ready) document.getElementById('tag-'+id).classList.add('show');
+            } else {
+                el.classList.remove('active');
+                document.getElementById('icon-'+id).innerText = '👤';
+                document.getElementById('name-'+id).innerText = 'Waiting...';
+                document.getElementById('tag-'+id).classList.remove('show');
+            }
+        };
+        setSlot('p1', r.p1);
+        setSlot('p2', r.p2);
+        
+        if(r.p1 && r.p2) {
+            document.getElementById('btn-ready').innerText = "READY!";
+            document.getElementById('btn-ready').disabled = false;
+        }
+    }
+
+    function processLogs(logs) {
+        if(logs.length <= lastLogLen) return;
+        const newLogs = logs.slice(lastLogLen);
+        
+        newLogs.forEach(l => {
+            const txt = typeof l === 'object' ? l.msg : l;
+            addLog(txt);
+
+            if(txt.includes('思考')) showBubble(txt.includes('P2')||txt.includes('AI')?'p2':'p1', '🤔 ...');
+            
+            // Damage Logic
+            if(txt.includes('造成') && txt.includes('伤害')) {
+                const isP1Atk = txt.includes('P1') || txt.includes('Hero');
+                const attacker = isP1Atk ? 'p1' : 'p2';
+                const defender = isP1Atk ? 'p2' : 'p1';
+                const dmg = txt.match(/造成 (\d+)/)?.[1] || 0;
+                
+                playHitAnim(attacker, defender, dmg, txt.includes('暴击'));
+
+                const hpMatch = txt.match(/\[HP:(\d+)\]/);
+                if(hpMatch) {
+                    const hp = parseInt(hpMatch[1]);
+                    updateHp(defender, hp);
+                }
+            }
+        });
+        lastLogLen = logs.length;
+    }
+
+    function updateHp(player, val) {
+        const pct = (val / 120) * 100;
+        const bar = document.getElementById(`hp-${player}`);
+        bar.style.width = pct + '%';
+        document.getElementById(`txt-hp-${player}`).innerText = val + '/120';
+        
+        if(pct > 50) bar.style.background = 'linear-gradient(90deg, #00ff00, #adff2f)';
+        else if(pct > 20) bar.style.background = 'linear-gradient(90deg, #ffd700, #ffa500)';
+        else bar.style.background = 'linear-gradient(90deg, #ff4500, #ff0000)';
+    }
+
+    function playHitAnim(atkId, defId, dmg, isCrit) {
+        const aEl = document.getElementById('spr-'+atkId);
+        aEl.style.transform = atkId==='p1' ? 'translateX(100px)' : 'scaleX(-1) translateX(100px)';
+        setTimeout(()=>aEl.style.transform = atkId==='p1' ? 'translateX(0)' : 'scaleX(-1) translateX(0)', 200);
+
+        setTimeout(() => {
+            const dEl = document.getElementById('spr-'+defId);
+            dEl.parentElement.classList.add('effect-shake');
+            setTimeout(() => dEl.parentElement.classList.remove('effect-shake'), 400);
+
+            const float = document.getElementById('dmg-'+defId);
+            float.innerText = "-" + dmg;
+            float.className = "dmg-popup anim-float " + (isCrit ? "crit" : "");
+            const newOne = float.cloneNode(true);
+            float.parentNode.replaceChild(newOne, float);
+        }, 200);
+    }
+
+    function showBubble(id, txt) {
+        const b = document.getElementById('msg-'+id);
+        b.innerText = txt;
+        b.classList.add('show');
+        setTimeout(()=>b.classList.remove('show'), 2000);
+    }
+
+    function addLog(txt) {
+        const box = document.getElementById('battle-logs');
+        const div = document.createElement('div');
+        div.className = 'log-row';
+        div.innerHTML = txt.replace(/Hash: (0x[a-fA-F0-9]+)/, '<a href="https://zetachain-athens-3.blockscout.com/tx/$1" target="_blank" class="tx-link">[🔗 链上确认]</a>').replace(/\[HP:\d+\]/, '');
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async function doReady() {
+        await fetch(`${API}/ready`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:state.addr, heroId:state.hero}) });
+        document.getElementById('btn-ready').innerText = "WAITING...";
+        document.getElementById('btn-ready').disabled = true;
+    }
+
+    function startLobbyPoll() {
+        setInterval(async()=>{
+            if(document.getElementById('view-lobby').style.display === 'none') return;
+            const res = await fetch(`${API}/lobby`);
+            const d = await res.json();
+            const list = document.getElementById('room-list');
+            if(d.rooms.length===0) list.innerHTML = "<div style='padding:20px;color:#444;text-align:center'>暂无房间...</div>";
+            else list.innerHTML = d.rooms.map(r => `
+                <div class="room-item">
+                    <div>
+                        <span style="color:#fff;font-weight:bold;">${r.name}</span> 
+                        <span style="font-size:12px;color:#666; margin-left:10px;">${r.type} | Host: ${r.p1?.hero||'?'}</span>
+                    </div>
+                    <div>
+                        <span style="font-size:12px;color:#aaa;margin-right:10px;">${r.status} (${r.spectators}👁️)</span>
+                        ${r.status === 'waiting' ? 
+                          `<button class="join-btn" onclick="openHeroSelect('join','${r.id}')">⚔️ 加入</button>` : 
+                          `<button class="spectate-btn" onclick="spectate('${r.id}')">👁️ 观战</button>`}
+                    </div>
+                </div>
+            `).join("");
+        }, 3000);
+    }
+</script>
+
+</body>
+</html>
