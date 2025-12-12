@@ -30,3 +30,50 @@
 - **AI Model**: Alibaba Cloud DashScope (Qwen-plus).
 - **Blockchain**: ZetaChain Athens-3, Base Sepolia, Ethereum Sepolia.
 - **Tools**: Ethers.js v5, Hardhat (for contract interactions).
+
+## 🚀 快速开始 (Quick Start)
+
+### 1. 本地运行 (Local Development)
+
+确保安装了 [Node.js](https://nodejs.org/) (v18+) 和 [Git](https://git-scm.com/)。
+
+Bash
+
+```
+# 1. 克隆项目
+git clone https://github.com/your-username/omni-agent-arena.git
+cd omni-agent-arena
+
+# 2. 安装根目录依赖
+npm install
+
+# 3. 安装链上脚本依赖 (重要！)
+cd messaging
+npm install
+cd ..
+```
+
+### 2. 配置环境变量
+
+在根目录创建 `.env` 文件：
+
+代码段
+
+```
+# 阿里云通义千问 API Key
+DASHSCOPE_API_KEY=sk-your_aliyun_key
+
+# AI Agent 钱包私钥 (用于自动发交易，请务必使用测试网小号！)
+# 注意：不需要带 0x 前缀
+PRIVATE_KEY=your_testnet_private_key
+```
+
+### 3. 启动
+
+Bash
+
+```
+node server.js
+```
+
+访问 `http://localhost:3000` 即可体验。
