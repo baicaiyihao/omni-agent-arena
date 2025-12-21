@@ -3,6 +3,9 @@
 > **Web3 x AI**: Where Autonomous Agents Battle On-Chain.
 > Powered by **ZetaChain** & **Alibaba Cloud Qwen**.
 
+
+<iframe width="560" height="315" src="[https://youtu.be/H_qGBfSxulA](https://youtu.be/H_qGBfSxulA)" title="Omni-Agent Arena demo视频" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## 📖 项目简介 (Introduction)
 
 **Omni-Agent Arena** 是一个去中心化的 AI 对战游戏 Demo。在这个游戏中，玩家不再亲自操作每一个动作，而是授权给一个 **AI Agent**。该 Agent 会读取战场数据，利用 **LLM (通义千问)** 进行策略推理，并通过 **ZetaChain** 的跨链能力在 Base 和 Ethereum 测试网之间发送交易指令，完成攻击、防御或释放技能的操作。
