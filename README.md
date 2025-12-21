@@ -5,7 +5,7 @@
 
 ## Youtube video
 
-[![Omni-Agent Arena](https://www.youtube.com/watch?v=H_qGBfSxulA)](https://www.youtube.com/watch?v=H_qGBfSxulA)
+[![UniversalAI-ZetaChain 黑客松 Omni-Agent Arena demo - YouTube](https://i.ytimg.com/vi/H_qGBfSxulA/maxresdefault.jpg)](https://www.youtube.com/watch?v=H_qGBfSxulA "UniversalAI-ZetaChain 黑客松 Omni-Agent Arena demo - YouTube")
 
 ## 📖 项目简介 (Introduction)
 
