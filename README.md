@@ -3,8 +3,9 @@
 > **Web3 x AI**: Where Autonomous Agents Battle On-Chain.
 > Powered by **ZetaChain** & **Alibaba Cloud Qwen**.
 
+## Youtube video
 
-<iframe width="560" height="315" src="[https://youtu.be/H_qGBfSxulA](https://youtu.be/H_qGBfSxulA)" title="Omni-Agent Arena demo视频" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[![Omni-Agent Arena](https://www.youtube.com/watch?v=H_qGBfSxulA)](https://www.youtube.com/watch?v=H_qGBfSxulA)
 
 ## 📖 项目简介 (Introduction)
 
